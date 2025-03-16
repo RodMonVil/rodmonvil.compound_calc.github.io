@@ -36,6 +36,10 @@
             label {
                 font-weight: bold;
             }
+            .table-dark tbody tr td,
+            .table-dark thead th {
+                border-color: #6c757d;
+            }
         </style>
         <!-- Chart.js -->
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -132,8 +136,9 @@
                 </div>
                 <!-- Output Panel -->
                 <div class="col-md-8">
+                    <!-- Summary -->
                     <div class="card p-3 mb-4">
-                        <h4>Results</h4>
+                        <h4>Summary</h4>
                         <div id="results">
                             <p>
                                 <strong>Final Value:</strong>
@@ -153,9 +158,46 @@
                             </p>
                         </div>
                     </div>
+                    <!-- Multi-line Growth Chart -->
                     <div class="card p-3 mb-4">
                         <h4>Growth Chart</h4>
                         <canvas id="growthChart"></canvas>
+                    </div>
+                    <!-- Stacked Breakdown Chart -->
+                    <div class="card p-3 mb-4">
+                        <h4>Breakdown Chart</h4>
+                        <canvas id="breakdownChart"></canvas>
+                    </div>
+                    <!-- Yearly Breakdown Table with CSV Export -->
+                    <div class="card p-3 mb-4">
+                        <div
+                            class="d-flex justify-content-between align-items-center"
+                        >
+                            <h4 class="mb-0">Yearly Breakdown</h4>
+                            <button class="btn btn-info btn-sm" id="exportCSV">
+                                Export CSV
+                            </button>
+                        </div>
+                        <div class="table-responsive mt-2">
+                            <table
+                                class="table table-dark table-striped"
+                                id="breakdownTable"
+                            >
+                                <thead>
+                                    <tr>
+                                        <th>Year</th>
+                                        <th>Starting Value</th>
+                                        <th>Contributions</th>
+                                        <th>Interest Earned</th>
+                                        <th>Ending Value</th>
+                                        <th>Real Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Rows will be dynamically inserted here -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -171,7 +213,7 @@
 
             // Add a new contribution input set
             function addContributionInput() {
-                const id = Date.now(); // Simple unique identifier
+                const id = Date.now(); // Unique identifier
                 contributions.push({
                     id,
                     amount: 0,
@@ -251,7 +293,7 @@
         `;
                 });
 
-                // Event listener for removing a contribution
+                // Remove contribution event
                 document
                     .querySelectorAll(".remove-contribution")
                     .forEach((button) => {
@@ -297,7 +339,157 @@
                 .getElementById("addContribution")
                 .addEventListener("click", addContributionInput);
 
-            // Compound Interest Calculation Function
+            // Render the detailed yearly breakdown table
+            function renderBreakdownTable(data) {
+                const tbody = document
+                    .getElementById("breakdownTable")
+                    .querySelector("tbody");
+                tbody.innerHTML = "";
+                data.forEach((item) => {
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `
+          <td>${item.year}</td>
+          <td>$${item.startingValue.toFixed(2)}</td>
+          <td>$${item.contributions.toFixed(2)}</td>
+          <td>$${item.interestEarned.toFixed(2)}</td>
+          <td>$${item.endingValue.toFixed(2)}</td>
+          <td>$${item.realValue.toFixed(2)}</td>
+        `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // Multi-line chart (Growth Chart) and Stacked Bar (Breakdown Chart) instances
+            let growthChartInstance, breakdownChartInstance;
+
+            // Update the multi-line growth chart
+            function updateGrowthChart(
+                labels,
+                portfolioValues,
+                cumContributions,
+                cumInterest
+            ) {
+                const ctx = document
+                    .getElementById("growthChart")
+                    .getContext("2d");
+                if (growthChartInstance) growthChartInstance.destroy();
+                growthChartInstance = new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: "Portfolio Value",
+                                data: portfolioValues,
+                                borderColor: "rgba(0, 123, 255, 1)",
+                                fill: false,
+                                tension: 0.1,
+                            },
+                            {
+                                label: "Cumulative Contributions",
+                                data: cumContributions,
+                                borderColor: "rgba(40, 167, 69, 1)",
+                                fill: false,
+                                tension: 0.1,
+                            },
+                            {
+                                label: "Cumulative Interest",
+                                data: cumInterest,
+                                borderColor: "rgba(220, 53, 69, 1)",
+                                fill: false,
+                                tension: 0.1,
+                            },
+                        ],
+                    },
+                    options: {
+                        scales: {
+                            x: { title: { display: true, text: "Years" } },
+                            y: {
+                                title: { display: true, text: "Value ($)" },
+                                beginAtZero: true,
+                            },
+                        },
+                    },
+                });
+            }
+
+            // Update the stacked bar breakdown chart
+            function updateBreakdownChart(
+                labels,
+                annualContributions,
+                annualInterest
+            ) {
+                const ctx = document
+                    .getElementById("breakdownChart")
+                    .getContext("2d");
+                if (breakdownChartInstance) breakdownChartInstance.destroy();
+                breakdownChartInstance = new Chart(ctx, {
+                    type: "bar",
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: "Contributions",
+                                data: annualContributions,
+                                backgroundColor: "rgba(40, 167, 69, 0.7)",
+                            },
+                            {
+                                label: "Interest Earned",
+                                data: annualInterest,
+                                backgroundColor: "rgba(220, 53, 69, 0.7)",
+                            },
+                        ],
+                    },
+                    options: {
+                        plugins: {
+                            tooltip: { mode: "index", intersect: false },
+                            legend: { display: true },
+                        },
+                        responsive: true,
+                        scales: {
+                            x: {
+                                stacked: true,
+                                title: { display: true, text: "Years" },
+                            },
+                            y: {
+                                stacked: true,
+                                title: { display: true, text: "Value ($)" },
+                                beginAtZero: true,
+                            },
+                        },
+                    },
+                });
+            }
+
+            // Export table data as CSV
+            function exportTableToCSV(filename) {
+                let csv = [];
+                const rows = document.querySelectorAll("#breakdownTable tr");
+                rows.forEach((row) => {
+                    let rowData = [];
+                    row.querySelectorAll("td, th").forEach((cell) => {
+                        rowData.push('"' + cell.innerText + '"');
+                    });
+                    csv.push(rowData.join(","));
+                });
+                const csvFile = new Blob([csv.join("\n")], {
+                    type: "text/csv",
+                });
+                const downloadLink = document.createElement("a");
+                downloadLink.download = filename;
+                downloadLink.href = window.URL.createObjectURL(csvFile);
+                downloadLink.style.display = "none";
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+            }
+
+            document
+                .getElementById("exportCSV")
+                .addEventListener("click", function () {
+                    exportTableToCSV("breakdown.csv");
+                });
+
+            // Compound Interest Calculation Function with Yearly Breakdown
             function calculateCompoundInterest() {
                 // Retrieve main inputs
                 const principal = parseFloat(
@@ -356,36 +548,39 @@
                     });
                 });
 
-                // Arrays to store values for charting
-                let years = [];
-                let portfolioValues = [];
                 let totalContributions = 0;
                 let currentValue = principal;
+                let cumulativeContributions = 0;
+                let cumulativeInterest = 0;
 
-                // Loop over each year of the investment
+                let yearlyData = [];
+                let yearsArr = [];
+                let portfolioValuesArr = [];
+                let cumContributionsArr = [];
+                let cumInterestArr = [];
+                let annualContributionsArr = [];
+                let annualInterestArr = [];
+
+                // Loop through each year and calculate details
                 for (let year = 0; year <= duration; year++) {
-                    // Apply compound interest (using effective annual rate)
-                    if (year > 0) {
-                        currentValue =
-                            currentValue *
-                            Math.pow(
-                                1 + annualInterestRate / compoundingFrequency,
-                                compoundingFrequency
-                            );
-                    }
+                    let startingValue = currentValue;
+                    let contributionsThisYear = 0;
 
-                    // Process contributions applicable for this year
+                    // Process contributions for the current year
                     contributions.forEach((contrib) => {
                         if (year >= contrib.startYear) {
+                            // One-Time Contribution: add only in the starting year
                             if (
                                 contrib.type === "one-time" &&
                                 year === contrib.startYear
                             ) {
                                 currentValue += contrib.amount;
+                                contributionsThisYear += contrib.amount;
                                 totalContributions += contrib.amount;
-                            } else if (contrib.type === "periodic") {
+                            }
+                            // Periodic contributions: add each year from startYear onward
+                            else if (contrib.type === "periodic") {
                                 let yearsSinceStart = year - contrib.startYear;
-                                // For periodic contributions, assume contributions occur evenly per year
                                 for (let i = 0; i < contrib.frequency; i++) {
                                     let contributionAmount = contrib.amount;
                                     if (contrib.growthType === "percentage") {
@@ -399,23 +594,55 @@
                                             yearsSinceStart;
                                     }
                                     currentValue += contributionAmount;
+                                    contributionsThisYear += contributionAmount;
                                     totalContributions += contributionAmount;
                                 }
                             }
                         }
                     });
 
-                    years.push(year);
-                    portfolioValues.push(currentValue);
+                    // Record value before applying interest
+                    let valueBeforeInterest = currentValue;
+                    // Apply compound interest for the year (if not the final year)
+                    if (year < duration) {
+                        currentValue =
+                            currentValue *
+                            Math.pow(
+                                1 + annualInterestRate / compoundingFrequency,
+                                compoundingFrequency
+                            );
+                    }
+                    // Calculate interest earned during this year
+                    let interestEarned = currentValue - valueBeforeInterest;
+                    cumulativeContributions += contributionsThisYear;
+                    cumulativeInterest += interestEarned;
+
+                    // Calculate inflation-adjusted (real) value for this year
+                    let realValueYear =
+                        currentValue / Math.pow(1 + inflationRate, year);
+
+                    // Store yearly breakdown data
+                    yearlyData.push({
+                        year: year,
+                        startingValue: startingValue,
+                        contributions: contributionsThisYear,
+                        interestEarned: interestEarned,
+                        endingValue: currentValue,
+                        realValue: realValueYear,
+                    });
+
+                    // Save data for charts
+                    yearsArr.push(year);
+                    portfolioValuesArr.push(currentValue);
+                    cumContributionsArr.push(cumulativeContributions);
+                    cumInterestArr.push(cumulativeInterest);
+                    annualContributionsArr.push(contributionsThisYear);
+                    annualInterestArr.push(interestEarned);
                 }
 
-                // Calculate totals and inflation-adjusted value
+                // Calculate summary values
                 const totalInterest =
                     currentValue - principal - totalContributions;
-                const realValue =
-                    currentValue / Math.pow(1 + inflationRate, duration);
-
-                // Update results in the DOM
                 document.getElementById("finalValue").innerText =
                     "$" + currentValue.toFixed(2);
                 document.getElementById("totalContributions").innerText =
@@ -423,44 +650,26 @@
                 document.getElementById("totalInterest").innerText =
                     "$" + totalInterest.toFixed(2);
                 document.getElementById("realValue").innerText =
-                    "$" + realValue.toFixed(2);
+                    "$" +
+                    (
+                        currentValue / Math.pow(1 + inflationRate, duration)
+                    ).toFixed(2);
 
-                // Update the growth chart
-                updateChart(years, portfolioValues);
-            }
+                // Update charts
+                updateGrowthChart(
+                    yearsArr,
+                    portfolioValuesArr,
+                    cumContributionsArr,
+                    cumInterestArr
+                );
+                updateBreakdownChart(
+                    yearsArr,
+                    annualContributionsArr,
+                    annualInterestArr
+                );
 
-            // Chart.js: Create or update the line chart
-            let chart;
-            function updateChart(labels, data) {
-                const ctx = document
-                    .getElementById("growthChart")
-                    .getContext("2d");
-                if (chart) chart.destroy();
-                chart = new Chart(ctx, {
-                    type: "line",
-                    data: {
-                        labels: labels,
-                        datasets: [
-                            {
-                                label: "Portfolio Value",
-                                data: data,
-                                fill: false,
-                                borderColor: "rgba(0, 123, 255, 1)",
-                                tension: 0.1,
-                            },
-                        ],
-                    },
-                    options: {
-                        scales: {
-                            x: { title: { display: true, text: "Years" } },
-                            y: {
-                                title: { display: true, text: "Value ($)" },
-                                beginAtZero: true,
-                            },
-                        },
-                        plugins: { legend: { display: false } },
-                    },
-                });
+                // Render the breakdown table
+                renderBreakdownTable(yearlyData);
             }
 
             // Event listener for form submission
