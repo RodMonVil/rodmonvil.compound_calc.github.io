@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Compound Interest Calculator</title>
+        <!-- Bootstrap CSS (using CDN) -->
+        <link
+            rel="stylesheet"
+            href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+        />
+        <!-- Custom Dark Mode CSS -->
+        <style>
+            body {
+                background-color: #343a40;
+                color: #ffffff;
+            }
+            .form-control,
+            .custom-select {
+                background-color: #495057;
+                color: #ffffff;
+                border: none;
+            }
+            .form-control:focus,
+            .custom-select:focus {
+                box-shadow: none;
+            }
+            .btn-primary {
+                background-color: #007bff;
+                border: none;
+            }
+            .card {
+                background-color: #495057;
+                border: none;
+            }
+            label {
+                font-weight: bold;
+            }
+        </style>
+        <!-- Chart.js -->
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    </head>
+    <body>
+        <div class="container my-4">
+            <h1 class="text-center mb-4">Compound Interest Calculator</h1>
+            <div class="row">
+                <!-- Input Panel -->
+                <div class="col-md-4">
+                    <div class="card p-3 mb-4">
+                        <h4>Input Parameters</h4>
+                        <form id="calcForm">
+                            <!-- Principal & Rates -->
+                            <div class="form-group">
+                                <label for="principal">Principal Amount</label>
+                                <input
+                                    type="number"
+                                    class="form-control"
+                                    id="principal"
+                                    placeholder="Enter principal"
+                                    required
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="interestRate"
+                                    >Annual Interest Rate (%)</label
+                                >
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    class="form-control"
+                                    id="interestRate"
+                                    placeholder="Enter interest rate"
+                                    required
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="inflationRate"
+                                    >Inflation Rate (%)</label
+                                >
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    class="form-control"
+                                    id="inflationRate"
+                                    placeholder="Enter inflation rate"
+                                    required
+                                />
+                            </div>
+                            <div class="form-group">
+                                <label for="compoundingFrequency"
+                                    >Compounding Frequency</label
+                                >
+                                <select
+                                    class="custom-select"
+                                    id="compoundingFrequency"
+                                >
+                                    <option value="1">Yearly</option>
+                                    <option value="12" selected>Monthly</option>
+                                    <option value="365">Daily</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="duration">Duration (years)</label>
+                                <input
+                                    type="number"
+                                    class="form-control"
+                                    id="duration"
+                                    placeholder="Enter duration in years"
+                                    required
+                                />
+                            </div>
+                            <hr />
+                            <!-- Additional Contributions Section -->
+                            <h5>Additional Contributions</h5>
+                            <div id="contributionsList"></div>
+                            <button
+                                type="button"
+                                id="addContribution"
+                                class="btn btn-secondary btn-sm mb-2"
+                            >
+                                Add Contribution
+                            </button>
+                            <hr />
+                            <button
+                                type="submit"
+                                class="btn btn-primary btn-block"
+                            >
+                                Calculate
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <!-- Output Panel -->
+                <div class="col-md-8">
+                    <div class="card p-3 mb-4">
+                        <h4>Results</h4>
+                        <div id="results">
+                            <p>
+                                <strong>Final Value:</strong>
+                                <span id="finalValue"></span>
+                            </p>
+                            <p>
+                                <strong>Total Contributions:</strong>
+                                <span id="totalContributions"></span>
+                            </p>
+                            <p>
+                                <strong>Total Interest Earned:</strong>
+                                <span id="totalInterest"></span>
+                            </p>
+                            <p>
+                                <strong>Inflation Adjusted Value:</strong>
+                                <span id="realValue"></span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="card p-3 mb-4">
+                        <h4>Growth Chart</h4>
+                        <canvas id="growthChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bootstrap & jQuery (via CDN) -->
+        <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
+
+        <script>
+            // Array to store additional contribution objects
+            let contributions = [];
+
+            // Add a new contribution input set
+            function addContributionInput() {
+                const id = Date.now(); // Simple unique identifier
+                contributions.push({
+                    id,
+                    amount: 0,
+                    type: "one-time",
+                    startYear: 0,
+                    frequency: 0,
+                    growthType: "none",
+                    growthValue: 0,
+                });
+                renderContributions();
+            }
+
+            // Render the contribution input fields dynamically
+            function renderContributions() {
+                const container = document.getElementById("contributionsList");
+                container.innerHTML = "";
+                contributions.forEach((contrib) => {
+                    container.innerHTML += `
+          <div class="border p-2 mb-2" data-id="${contrib.id}">
+            <div class="form-group">
+              <label>Contribution Amount</label>
+              <input type="number" class="form-control contrib-amount" value="${
+                  contrib.amount
+              }" placeholder="Amount">
+            </div>
+            <div class="form-group">
+              <label>Type</label>
+              <select class="custom-select contrib-type">
+                <option value="one-time" ${
+                    contrib.type === "one-time" ? "selected" : ""
+                }>One-Time</option>
+                <option value="periodic" ${
+                    contrib.type === "periodic" ? "selected" : ""
+                }>Periodic</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Start Year</label>
+              <input type="number" class="form-control contrib-startYear" value="${
+                  contrib.startYear
+              }" placeholder="Year">
+            </div>
+            <div class="form-group contrib-frequency-group" style="display: ${
+                contrib.type === "periodic" ? "block" : "none"
+            };">
+              <label>Frequency (per year)</label>
+              <input type="number" class="form-control contrib-frequency" value="${
+                  contrib.frequency
+              }" placeholder="Frequency">
+            </div>
+            <div class="form-group">
+              <label>Growth</label>
+              <select class="custom-select contrib-growthType">
+                <option value="none" ${
+                    contrib.growthType === "none" ? "selected" : ""
+                }>None</option>
+                <option value="percentage" ${
+                    contrib.growthType === "percentage" ? "selected" : ""
+                }>Percentage</option>
+                <option value="fixed" ${
+                    contrib.growthType === "fixed" ? "selected" : ""
+                }>Fixed Amount</option>
+              </select>
+            </div>
+            <div class="form-group contrib-growthValue-group" style="display: ${
+                contrib.growthType !== "none" ? "block" : "none"
+            };">
+              <label>Growth Value (${
+                  contrib.growthType === "percentage" ? "%" : "$"
+              })</label>
+              <input type="number" class="form-control contrib-growthValue" value="${
+                  contrib.growthValue
+              }" placeholder="Growth Value">
+            </div>
+            <button type="button" class="btn btn-danger btn-sm remove-contribution">Remove</button>
+          </div>
+        `;
+                });
+
+                // Event listener for removing a contribution
+                document
+                    .querySelectorAll(".remove-contribution")
+                    .forEach((button) => {
+                        button.addEventListener("click", function () {
+                            const id = Number(
+                                this.parentElement.getAttribute("data-id")
+                            );
+                            contributions = contributions.filter(
+                                (c) => c.id !== id
+                            );
+                            renderContributions();
+                        });
+                    });
+
+                // Toggle frequency input based on contribution type
+                document.querySelectorAll(".contrib-type").forEach((select) => {
+                    select.addEventListener("change", function () {
+                        const parent = this.closest("[data-id]");
+                        const type = this.value;
+                        parent.querySelector(
+                            ".contrib-frequency-group"
+                        ).style.display =
+                            type === "periodic" ? "block" : "none";
+                    });
+                });
+
+                // Toggle growth value input based on growth type
+                document
+                    .querySelectorAll(".contrib-growthType")
+                    .forEach((select) => {
+                        select.addEventListener("change", function () {
+                            const parent = this.closest("[data-id]");
+                            const type = this.value;
+                            parent.querySelector(
+                                ".contrib-growthValue-group"
+                            ).style.display =
+                                type !== "none" ? "block" : "none";
+                        });
+                    });
+            }
+
+            document
+                .getElementById("addContribution")
+                .addEventListener("click", addContributionInput);
+
+            // Compound Interest Calculation Function
+            function calculateCompoundInterest() {
+                // Retrieve main inputs
+                const principal = parseFloat(
+                    document.getElementById("principal").value
+                );
+                const annualInterestRate =
+                    parseFloat(document.getElementById("interestRate").value) /
+                    100;
+                const inflationRate =
+                    parseFloat(document.getElementById("inflationRate").value) /
+                    100;
+                const compoundingFrequency = parseInt(
+                    document.getElementById("compoundingFrequency").value
+                );
+                const duration = parseInt(
+                    document.getElementById("duration").value
+                );
+
+                // Parse contribution inputs
+                const contribElements = document.querySelectorAll(
+                    "#contributionsList > div"
+                );
+                contributions = [];
+                contribElements.forEach((div) => {
+                    const id = Number(div.getAttribute("data-id"));
+                    const amount =
+                        parseFloat(
+                            div.querySelector(".contrib-amount").value
+                        ) || 0;
+                    const type = div.querySelector(".contrib-type").value;
+                    const startYear =
+                        parseInt(
+                            div.querySelector(".contrib-startYear").value
+                        ) || 0;
+                    const frequency =
+                        type === "periodic"
+                            ? parseInt(
+                                  div.querySelector(".contrib-frequency").value
+                              ) || 0
+                            : 0;
+                    const growthType = div.querySelector(
+                        ".contrib-growthType"
+                    ).value;
+                    const growthValue =
+                        parseFloat(
+                            div.querySelector(".contrib-growthValue").value
+                        ) || 0;
+                    contributions.push({
+                        id,
+                        amount,
+                        type,
+                        startYear,
+                        frequency,
+                        growthType,
+                        growthValue,
+                    });
+                });
+
+                // Arrays to store values for charting
+                let years = [];
+                let portfolioValues = [];
+                let totalContributions = 0;
+                let currentValue = principal;
+
+                // Loop over each year of the investment
+                for (let year = 0; year <= duration; year++) {
+                    // Apply compound interest (using effective annual rate)
+                    if (year > 0) {
+                        currentValue =
+                            currentValue *
+                            Math.pow(
+                                1 + annualInterestRate / compoundingFrequency,
+                                compoundingFrequency
+                            );
+                    }
+
+                    // Process contributions applicable for this year
+                    contributions.forEach((contrib) => {
+                        if (year >= contrib.startYear) {
+                            if (
+                                contrib.type === "one-time" &&
+                                year === contrib.startYear
+                            ) {
+                                currentValue += contrib.amount;
+                                totalContributions += contrib.amount;
+                            } else if (contrib.type === "periodic") {
+                                let yearsSinceStart = year - contrib.startYear;
+                                // For periodic contributions, assume contributions occur evenly per year
+                                for (let i = 0; i < contrib.frequency; i++) {
+                                    let contributionAmount = contrib.amount;
+                                    if (contrib.growthType === "percentage") {
+                                        contributionAmount *= Math.pow(
+                                            1 + contrib.growthValue / 100,
+                                            yearsSinceStart
+                                        );
+                                    } else if (contrib.growthType === "fixed") {
+                                        contributionAmount +=
+                                            contrib.growthValue *
+                                            yearsSinceStart;
+                                    }
+                                    currentValue += contributionAmount;
+                                    totalContributions += contributionAmount;
+                                }
+                            }
+                        }
+                    });
+
+                    years.push(year);
+                    portfolioValues.push(currentValue);
+                }
+
+                // Calculate totals and inflation-adjusted value
+                const totalInterest =
+                    currentValue - principal - totalContributions;
+                const realValue =
+                    currentValue / Math.pow(1 + inflationRate, duration);
+
+                // Update results in the DOM
+                document.getElementById("finalValue").innerText =
+                    "$" + currentValue.toFixed(2);
+                document.getElementById("totalContributions").innerText =
+                    "$" + totalContributions.toFixed(2);
+                document.getElementById("totalInterest").innerText =
+                    "$" + totalInterest.toFixed(2);
+                document.getElementById("realValue").innerText =
+                    "$" + realValue.toFixed(2);
+
+                // Update the growth chart
+                updateChart(years, portfolioValues);
+            }
+
+            // Chart.js: Create or update the line chart
+            let chart;
+            function updateChart(labels, data) {
+                const ctx = document
+                    .getElementById("growthChart")
+                    .getContext("2d");
+                if (chart) chart.destroy();
+                chart = new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: "Portfolio Value",
+                                data: data,
+                                fill: false,
+                                borderColor: "rgba(0, 123, 255, 1)",
+                                tension: 0.1,
+                            },
+                        ],
+                    },
+                    options: {
+                        scales: {
+                            x: { title: { display: true, text: "Years" } },
+                            y: {
+                                title: { display: true, text: "Value ($)" },
+                                beginAtZero: true,
+                            },
+                        },
+                        plugins: { legend: { display: false } },
+                    },
+                });
+            }
+
+            // Event listener for form submission
+            document
+                .getElementById("calcForm")
+                .addEventListener("submit", function (e) {
+                    e.preventDefault();
+                    calculateCompoundInterest();
+                });
+        </script>
+    </body>
+</html>
